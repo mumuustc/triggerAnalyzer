@@ -1,0 +1,13 @@
+submitjob
+test.root
+test/
+temp_gccflags.c
+.sl73_gcc485/
+StRoot/StMiniTreeMaker/\.consign
+
+anaMacro/condor_project
+anaMacro/datalist4Job
+anaMacro/filelist4Job/
+anaMacro/analysis
+anaMacro/*.o
+anaMacro/*.root

@@ -1,0 +1,8 @@
+1) set STAR library to be SL20d using "starver SL20d" or directly put "starver SL20d" into ~/.cshrc for setting SL20d to be the default one
+2) compile code: source compileCode.sh
+3) run test: ./run_test.sh
+4) submit job to cluster to skim data: submit.sh
+
+file catalog example to find STAR data: /star/u/syang/run21/OOTrigger/data/getfilelist.csh
+and grab data from HPSS: /star/u/syang/run21/OOTrigger/data/grabDataFromHpss.sh
+
