@@ -11,3 +11,4 @@ anaMacro/filelist4Job/
 anaMacro/analysis
 anaMacro/*.o
 anaMacro/*.root
+anaMacro/plotMarcoForQing

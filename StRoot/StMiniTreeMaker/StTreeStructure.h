@@ -60,6 +60,9 @@ struct StEvtData
 	Short_t  mSide[mNMax];
 	Short_t  mPosition[mNMax];
 	Short_t  mTile[mNMax];
+	Short_t  mRow[mNMax];
+	Float_t  mEpdEta[mNMax];
+	Float_t  mEpdPhi[mNMax];
 	Short_t  mADC[mNMax];
 	Short_t  mTAC[mNMax];
 	Short_t  mTDC[mNMax];

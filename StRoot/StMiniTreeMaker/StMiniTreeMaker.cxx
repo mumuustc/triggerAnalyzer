@@ -28,6 +28,8 @@ Int_t StMiniTreeMaker::Init()
 	////refMultCorr = CentralityMaker::instance()->getgRefMultCorr_VpdMBnoVtx()
 	//refMultCorr = new StRefMultCorr("grefmult_VpdMBnoVtx");
 
+	mEpdGeom = new StEpdGeom();
+
 	if(!mOutFileName.Length()){
 		LOG_ERROR << "StMiniTreeMaker:: no output file specified for tree and histograms." << endm;
 		return kStERR;
@@ -255,6 +257,7 @@ Bool_t StMiniTreeMaker::processPicoEvent()
 		mEvtData.mSide[i]     = epdHit->side();
 		mEvtData.mPosition[i] = epdHit->position();
 		mEvtData.mTile[i]     = epdHit->tile();
+		mEvtData.mRow[i]      = epdHit->row();
 		mEvtData.mADC[i]      = epdHit->adc();
 		mEvtData.mTAC[i]      = epdHit->tac();
 		mEvtData.mTDC[i]      = epdHit->tdc();
@@ -262,6 +265,11 @@ Bool_t StMiniTreeMaker::processPicoEvent()
 		mEvtData.mNMIP[i]     = epdHit->nMIP();
 		mEvtData.mTnMIP[i]    = epdHit->TnMIP(2, 0.3); // you can re-evaluate this variable offline, see this function in https://www.star.bnl.gov/webdata/dox/html/StPicoEpdHit_8h_source.html. NOTE, this function requires STAR library >= SL20d
 		mEvtData.mStatusIsGood[i] = epdHit->isGood();
+
+		TVector3 StraightLine = mEpdGeom->TileCenter(epdHit->id()) - vtxPos;
+		//TVector3 StraightLine = mEpdGeom->TileCenter(epdHit->position(), epdHit->tile(), epdHit->side()) - vtxPos;
+		mEvtData.mEpdEta[i] = StraightLine.Eta();
+		mEvtData.mEpdPhi[i] = StraightLine.Phi();
 
 		if(epdHit->side()<0){
 			mEvtData.mTotalEpdAdcEast += epdHit->adc();
@@ -516,6 +524,9 @@ void StMiniTreeMaker::bookTree()
 	mEvtTree->Branch("mSide", mEvtData.mSide, "mSide[mNEpdHits]/S");
 	mEvtTree->Branch("mPosition", mEvtData.mPosition, "mPosition[mNEpdHits]/S");
 	mEvtTree->Branch("mTile", mEvtData.mTile, "mTile[mNEpdHits]/S");
+	mEvtTree->Branch("mRow", mEvtData.mRow, "mRow[mNEpdHits]/S");
+	mEvtTree->Branch("mEpdEta", mEvtData.mEpdEta, "mEpdEta[mNEpdHits]/F");
+	mEvtTree->Branch("mEpdPhi", mEvtData.mEpdPhi, "mEpdPhi[mNEpdHits]/F");
 	mEvtTree->Branch("mADC", mEvtData.mADC, "mADC[mNEpdHits]/S");
 	mEvtTree->Branch("mTAC", mEvtData.mTAC, "mTAC[mNEpdHits]/S");
 	mEvtTree->Branch("mTDC", mEvtData.mTDC, "mTDC[mNEpdHits]/S");

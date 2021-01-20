@@ -96,6 +96,7 @@
 
 #include "StEpdUtil/StEpdEpFinder.h"
 #include "StEpdUtil/StEpdEpInfo.h"
+#include "StEpdUtil/StEpdGeom.h"
 
 #include "tables/St_mtdTriggerTimeCut_Table.h"
 #include "tables/St_mtdModuleToQTmap_Table.h"

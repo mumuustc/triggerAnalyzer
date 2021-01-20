@@ -31,6 +31,7 @@ class StPicoDst;
 class StPicoTrack;
 
 class StRefMultCorr;
+class StEpdGeom;
 
 #if !defined(ST_NO_TEMPLATE_DEF_ARGS) || defined(__CINT__)
 typedef vector<Int_t> IntVec;
@@ -87,6 +88,7 @@ class StMiniTreeMaker : public StMaker {
 		StPicoDst      *mPicoDst;
 
 		StRefMultCorr *refMultCorr; //decide centrality
+		StEpdGeom     *mEpdGeom;
 
 		TClonesArray  *mEpdHits;
 
