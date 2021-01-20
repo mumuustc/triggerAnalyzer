@@ -1,8 +1,8 @@
 //////////////////////////////////////////////////////////
 // This class has been automatically generated on
-// Sun Jan  3 15:14:41 2021 by ROOT version 5.34/38
+// Wed Jan 20 18:34:54 2021 by ROOT version 5.34/38
 // from TTree miniDst/miniDst
-// found on file: /gpfs01/star/pwg/syang/run21/OOTrigger/triggerAnalyzer/submitjob/rootfiles/st_physics_4603107570FABB6BE03C7A9F406009B2_36.root
+// found on file: ../test/test.root
 //////////////////////////////////////////////////////////
 
 #ifndef MINIEVENT_h
@@ -69,6 +69,9 @@ public :
    Short_t         mSide[800];   //[mNEpdHits]
    Short_t         mPosition[800];   //[mNEpdHits]
    Short_t         mTile[800];   //[mNEpdHits]
+   Short_t         mRow[800];   //[mNEpdHits]
+   Float_t         mEpdEta[800];   //[mNEpdHits]
+   Float_t         mEpdPhi[800];   //[mNEpdHits]
    Short_t         mADC[800];   //[mNEpdHits]
    Short_t         mTAC[800];   //[mNEpdHits]
    Short_t         mTDC[800];   //[mNEpdHits]
@@ -129,6 +132,9 @@ public :
    TBranch        *b_mSide;   //!
    TBranch        *b_mPosition;   //!
    TBranch        *b_mTile;   //!
+   TBranch        *b_mRow;   //!
+   TBranch        *b_mEpdEta;   //!
+   TBranch        *b_mEpdPhi;   //!
    TBranch        *b_mADC;   //!
    TBranch        *b_mTAC;   //!
    TBranch        *b_mTDC;   //!
@@ -160,9 +166,9 @@ MINIEVENT::MINIEVENT(TTree *tree) : fChain(0)
 // if parameter tree is not specified (or zero), connect the file
 // used to generate this class and read the Tree.
    if (tree == 0) {
-      TFile *f = (TFile*)gROOT->GetListOfFiles()->FindObject("/gpfs01/star/pwg/syang/run21/OOTrigger/triggerAnalyzer/submitjob/rootfiles/st_physics_4603107570FABB6BE03C7A9F406009B2_36.root");
+      TFile *f = (TFile*)gROOT->GetListOfFiles()->FindObject("../test/test.root");
       if (!f || !f->IsOpen()) {
-         f = new TFile("/gpfs01/star/pwg/syang/run21/OOTrigger/triggerAnalyzer/submitjob/rootfiles/st_physics_4603107570FABB6BE03C7A9F406009B2_36.root");
+         f = new TFile("../test/test.root");
       }
       f->GetObject("miniDst",tree);
 
@@ -258,6 +264,9 @@ void MINIEVENT::Init(TTree *tree)
    fChain->SetBranchAddress("mSide", mSide, &b_mSide);
    fChain->SetBranchAddress("mPosition", mPosition, &b_mPosition);
    fChain->SetBranchAddress("mTile", mTile, &b_mTile);
+   fChain->SetBranchAddress("mRow", mRow, &b_mRow);
+   fChain->SetBranchAddress("mEpdEta", mEpdEta, &b_mEpdEta);
+   fChain->SetBranchAddress("mEpdPhi", mEpdPhi, &b_mEpdPhi);
    fChain->SetBranchAddress("mADC", mADC, &b_mADC);
    fChain->SetBranchAddress("mTAC", mTAC, &b_mTAC);
    fChain->SetBranchAddress("mTDC", mTDC, &b_mTDC);
