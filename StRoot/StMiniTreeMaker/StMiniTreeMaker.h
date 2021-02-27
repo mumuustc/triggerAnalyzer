@@ -26,6 +26,13 @@ class TString;
 class TTree;
 class TFile;
 
+class StMuDstMaker;
+class StMuDst;
+class StEmcCollection;
+class StEmcPosition;
+class StEmcGeom;
+class StMuTrack;
+
 class StPicoDstMaker;
 class StPicoDst;
 class StPicoTrack;
@@ -55,6 +62,7 @@ class StMiniTreeMaker : public StMaker {
 		Int_t    Finish();
 
 		void	 setTriggerIDs(const IntVec triggerids);
+		void     setUseDefaultVtx(const Bool_t flag); 
 		void     setMaxVtxR(const Double_t max);
 		void     setMaxVtxZ(const Double_t max);
 		void     setMaxVzDiff(const Double_t max);
@@ -79,13 +87,23 @@ class StMiniTreeMaker : public StMaker {
 		void     bookTree();
 		void     bookHistos();
 		Bool_t   processPicoEvent();
+		Bool_t   processMuDstEvent();
 		Bool_t   isValidTrack(StPicoTrack *pTrack, TVector3 vtxPos) const;
+		Bool_t   isValidTrack(StMuTrack *pMuTrack) const;
+		Bool_t   getBemcInfo(StMuTrack *pMuTrack, const Short_t nTrks, Short_t &nEMCTrks, Bool_t flag=kFALSE);
 		void     calQxQy(StPicoTrack *pTrack, TVector3 vtexPos) const;
+		void     calQxQy(StMuTrack *pMuTrack) const;
 		void     fillEventPlane();
 
 	private:
 		StPicoDstMaker *mPicoDstMaker;
 		StPicoDst      *mPicoDst;
+
+		StMuDstMaker    *mMuDstMaker;          // Pointer to StMuDstMaker
+		StMuDst         *mMuDst;              // Pointer to MuDst event
+		StEmcCollection *mEmcCollection;
+		StEmcPosition   *mEmcPosition;
+		StEmcGeom       *mEmcGeom[4];
 
 		StRefMultCorr *refMultCorr; //decide centrality
 		StEpdGeom     *mEpdGeom;
@@ -95,6 +113,7 @@ class StMiniTreeMaker : public StMaker {
 		Bool_t         mPrintMemory;         // Flag to print out memory usage
 		Bool_t         mPrintCpu;            // Flag to print out CPU usage
 		Bool_t         mPrintConfig;         // Flag to print out task configuration
+        Bool_t         mDefaultVtx;          // Use Default Vertex
 		Double_t       mMaxVtxR;             // Maximum vertex r
 		Double_t       mMaxVtxZ;             // Maximum vertex z
 		Double_t       mMaxVzDiff;           // Maximum VpdVz-TpcVz 
@@ -124,7 +143,11 @@ class StMiniTreeMaker : public StMaker {
 		TH2D           *hGRefMultVsRefMult;
 		TH2D           *hNEpdHitsVsRefMult;
 		TH2D           *hNBtofMatchVsRefMult;
-		TH2D           *hNEpdHitsVsBtofMult;
+		TH2D           *hOnlineTofMultVsRefMult;
+		TH2D           *hOfflineTofMultVsRefMult;
+		TH2D           *hOnlineTofMultVsOfflineTofMult;
+		TH2D           *hNEpdHitsVsOfflineBtofMult;
+		TH2D           *hNEpdHitsVsOnlineBtofMult;
 		TH2D           *hTotalBbcAdcVsRefMult;
 		TH2D           *hTotalEpdAdcVsRefMult;
 		TH2D           *hBbcAdcWestVsBbcAdcEast;
@@ -144,6 +167,7 @@ class StMiniTreeMaker : public StMaker {
 };
 
 inline void	StMiniTreeMaker::setTriggerIDs(const IntVec triggerids) { mTriggerIDs = triggerids; }
+inline void StMiniTreeMaker::setUseDefaultVtx(const Bool_t flag) { mDefaultVtx = flag; }
 inline void StMiniTreeMaker::setMaxVtxR(const Double_t max) { mMaxVtxR = max; }
 inline void StMiniTreeMaker::setMaxVtxZ(const Double_t max) { mMaxVtxZ = max; }
 inline void StMiniTreeMaker::setMaxVzDiff(const Double_t max) { mMaxVzDiff = max; }

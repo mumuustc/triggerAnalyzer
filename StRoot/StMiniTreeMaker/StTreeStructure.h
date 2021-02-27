@@ -27,6 +27,7 @@ struct StEvtData
 	Int_t    mRefMultHalfWest;
 	UShort_t mNBemcMatch;
 	UShort_t mNBtofMatch;
+	UShort_t mOnlineBtofMult;
 	UShort_t mOfflineBtofMult;
 	Float_t  mRefMultCorr;
 	Float_t  mEvtWeight;
@@ -48,6 +49,8 @@ struct StEvtData
 	// ZDC ADC information
 	Float_t  mZdcSumAdcEast;
 	Float_t  mZdcSumAdcWest;
+	Float_t  mZdcUnAttenuatedEast;
+	Float_t  mZdcUnAttenuatedWest;
 	Float_t  mZdcSmdEastHorizontal[mNZdcStrips];
 	Float_t  mZdcSmdEastVertical[mNZdcStrips];
 	Float_t  mZdcSmdWestHorizontal[mNZdcStrips];

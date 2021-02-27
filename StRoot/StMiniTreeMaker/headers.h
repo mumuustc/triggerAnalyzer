@@ -47,6 +47,8 @@
 #include "StMtdPidTraits.h"
 #include "StMtdUtil/StMtdGeometry.h"
 #include "StTpcDedxPidAlgorithm.h"
+#include "StBbcTriggerDetector.h"
+#include "StZdcTriggerDetector.h"
 #include "StarClassLibrary/StParticleDefinition.hh"
 #include "tables/St_vertexSeed_Table.h"
 
@@ -62,6 +64,7 @@
 #include "StMuDSTMaker/COMMON/StMuMtdPidTraits.h"
 #include "StMuDSTMaker/COMMON/StMuBTofPidTraits.h"
 #include "StMuDSTMaker/COMMON/StMuBTofHit.h"
+#include "StMuDSTMaker/COMMON/StMuEpdHit.h"
 
 #include "StMuDSTMaker/COMMON/StMuEmcCollection.h"
 #include "StMuDSTMaker/COMMON/StMuEmcPoint.h"

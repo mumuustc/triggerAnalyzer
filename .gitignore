@@ -1,5 +1,5 @@
 submitjob
-test.root
+*.root
 test/
 temp_gccflags.c
 .sl73_gcc485/

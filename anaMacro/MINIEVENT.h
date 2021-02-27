@@ -1,8 +1,8 @@
 //////////////////////////////////////////////////////////
 // This class has been automatically generated on
-// Wed Jan 20 18:34:54 2021 by ROOT version 5.34/38
+// Sat Feb 27 13:56:42 2021 by ROOT version 5.34/38
 // from TTree miniDst/miniDst
-// found on file: ../test/test.root
+// found on file: ../test/test_MuDst.root
 //////////////////////////////////////////////////////////
 
 #ifndef MINIEVENT_h
@@ -43,6 +43,7 @@ public :
    Int_t           mRefMultHalfWest;
    UShort_t        mNBemcMatch;
    UShort_t        mNBtofMatch;
+   UShort_t        mOnlineBtofMult;
    UShort_t        mOfflineBtofMult;
    Float_t         mRefMultCorr;
    Float_t         mEvtWeight;
@@ -59,6 +60,8 @@ public :
    UInt_t          mTotalBbcAdcWest;
    Float_t         mZdcSumAdcEast;
    Float_t         mZdcSumAdcWest;
+   Float_t         mZdcUnAttenuatedEast;
+   Float_t         mZdcUnAttenuatedWest;
    Float_t         mZdcSmdEastHorizontal[8];
    Float_t         mZdcSmdEastVertical[8];
    Float_t         mZdcSmdWestHorizontal[8];
@@ -106,6 +109,7 @@ public :
    TBranch        *b_mRefMultHalfWest;   //!
    TBranch        *b_mNBemcMatch;   //!
    TBranch        *b_mNBtofMatch;   //!
+   TBranch        *b_mOnlineBtofMult;   //!
    TBranch        *b_mOfflineBtofMult;   //!
    TBranch        *b_mRefMultCorr;   //!
    TBranch        *b_mEvtWeight;   //!
@@ -122,6 +126,8 @@ public :
    TBranch        *b_mTotalBbcAdcWest;   //!
    TBranch        *b_mZdcSumAdcEast;   //!
    TBranch        *b_mZdcSumAdcWest;   //!
+   TBranch        *b_mZdcUnAttenuatedEast;   //!
+   TBranch        *b_mZdcUnAttenuatedWest;   //!
    TBranch        *b_mZdcSmdEastHorizontal;   //!
    TBranch        *b_mZdcSmdEastVertical;   //!
    TBranch        *b_mZdcSmdWestHorizontal;   //!
@@ -166,9 +172,9 @@ MINIEVENT::MINIEVENT(TTree *tree) : fChain(0)
 // if parameter tree is not specified (or zero), connect the file
 // used to generate this class and read the Tree.
    if (tree == 0) {
-      TFile *f = (TFile*)gROOT->GetListOfFiles()->FindObject("../test/test.root");
+      TFile *f = (TFile*)gROOT->GetListOfFiles()->FindObject("../test/test_MuDst.root");
       if (!f || !f->IsOpen()) {
-         f = new TFile("../test/test.root");
+         f = new TFile("../test/test_MuDst.root");
       }
       f->GetObject("miniDst",tree);
 
@@ -238,6 +244,7 @@ void MINIEVENT::Init(TTree *tree)
    fChain->SetBranchAddress("mRefMultHalfWest", &mRefMultHalfWest, &b_mRefMultHalfWest);
    fChain->SetBranchAddress("mNBemcMatch", &mNBemcMatch, &b_mNBemcMatch);
    fChain->SetBranchAddress("mNBtofMatch", &mNBtofMatch, &b_mNBtofMatch);
+   fChain->SetBranchAddress("mOnlineBtofMult", &mOnlineBtofMult, &b_mOnlineBtofMult);
    fChain->SetBranchAddress("mOfflineBtofMult", &mOfflineBtofMult, &b_mOfflineBtofMult);
    fChain->SetBranchAddress("mRefMultCorr", &mRefMultCorr, &b_mRefMultCorr);
    fChain->SetBranchAddress("mEvtWeight", &mEvtWeight, &b_mEvtWeight);
@@ -254,6 +261,8 @@ void MINIEVENT::Init(TTree *tree)
    fChain->SetBranchAddress("mTotalBbcAdcWest", &mTotalBbcAdcWest, &b_mTotalBbcAdcWest);
    fChain->SetBranchAddress("mZdcSumAdcEast", &mZdcSumAdcEast, &b_mZdcSumAdcEast);
    fChain->SetBranchAddress("mZdcSumAdcWest", &mZdcSumAdcWest, &b_mZdcSumAdcWest);
+   fChain->SetBranchAddress("mZdcUnAttenuatedEast", &mZdcUnAttenuatedEast, &b_mZdcUnAttenuatedEast);
+   fChain->SetBranchAddress("mZdcUnAttenuatedWest", &mZdcUnAttenuatedWest, &b_mZdcUnAttenuatedWest);
    fChain->SetBranchAddress("mZdcSmdEastHorizontal", mZdcSmdEastHorizontal, &b_mZdcSmdEastHorizontal);
    fChain->SetBranchAddress("mZdcSmdEastVertical", mZdcSmdEastVertical, &b_mZdcSmdEastVertical);
    fChain->SetBranchAddress("mZdcSmdWestHorizontal", mZdcSmdWestHorizontal, &b_mZdcSmdWestHorizontal);

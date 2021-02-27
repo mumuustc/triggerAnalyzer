@@ -1,7 +1,16 @@
 #!/bin/bash
 
+if [ $# != 1 ]; then
+     echo "You must provide a data list: \"isobric2018_picoDst.list\" OR \"isobric2018_MuDst.list\" OR \"AuAu14p5_2019.list\" OR \"test_MuDst.list\" OR \"test_picoDst.list\""
+	 echo "For instance, submit job using: \"./submit.sh isobric2018_MuDst.list\""
+	 exit 0
+fi
+
 dir=$PWD
+dataList=$1
+
 echo $dir
+echo $dataList
 
 # if one runs this macro in home directory, one needs to build a gpfs directory to store the produced miniTrees
 # NOTE, do NOT dump miniTrees into your home directory !!!
@@ -22,9 +31,9 @@ rm -rf submitScript/*
 rm -rf submitList/*
 rm -rf submitErrInfo/*
 
-ln -fs $dir/Run19_AuAu14p5_trigger.xml ./
+ln -fs $dir/triggerAnalyzer_scheduler.xml ./
 
-star-submit-template -template Run19_AuAu14p5_trigger.xml -entities dir=$dir
+star-submit-template -template triggerAnalyzer_scheduler.xml -entities dir=$dir,dataList=$dataList
 
 #for list in `ls $dir/picoDataList/sublist`
 #do

@@ -54,7 +54,7 @@ void load(){
 	gSystem->Load("StMiniTreeMaker");
 }
 
-void doEvent(Int_t nEvents=100, const Char_t *inputFile="test.list", const TString outputFile="test.root", const Bool_t debug = kTRUE)
+void doEvent(Int_t nEvents=1000, const Char_t *inputFile="test_MuDst.list", const TString outputFile="test.root", const Bool_t debug = kTRUE)
 {
 	load();
 
@@ -65,11 +65,48 @@ void doEvent(Int_t nEvents=100, const Char_t *inputFile="test.list", const TStri
 	StMuTimer timer;
 	timer.start();
 
-	StPicoDstMaker *picoMaker = new StPicoDstMaker(StPicoDstMaker::IoRead,inputFile,"picoDst"); 
-	//StPicoDstMaker *picoMaker = new StPicoDstMaker(0,inputFile,"picoDst"); 
+	Bool_t iMuDst = 0;
 
-	//St_db_Maker *dbMk = new St_db_Maker("StarDb", "MySQL:StarDb", "$STAR/StarDb","StarDb");
-	//dbMk->SetDateTime(20190101,0); //for run19 picoDst
+	ifstream infile;
+	infile.open(inputFile);
+	string name;
+	getline(infile,name);
+	infile.close();
+	std::size_t found = name.find("MuDst.root");
+	if(found!=std::string::npos) iMuDst = 1;
+
+
+	if(iMuDst){
+		char theFilter[80];
+		sprintf(theFilter,".MuDst.root:MuDst.root");
+		StMuDstMaker *microMaker = new StMuDstMaker(0,0,"",inputFile,theFilter,1000);
+		microMaker->Init();
+		microMaker->SetStatus("*",1);
+
+		//StMagFMaker *magfMk = new StMagFMaker; //add this line when run StMtdMatchMaker 
+
+		//StMtdCalibMaker *mtdCalibMaker = new StMtdCalibMaker("mtdcalib");
+
+		StEmcADCtoEMaker *adc2e = new StEmcADCtoEMaker();
+		adc2e->setPrint(false);
+		adc2e->saveAllStEvent(true);//Set to kTRUE if all hits are to be saved on StEvent
+
+		StPreEclMaker *pre_ecl = new StPreEclMaker();
+		pre_ecl->setPrint(kFALSE);
+
+		StEpcMaker *epc = new StEpcMaker();
+		epc->setPrint(kFALSE);
+
+		outputFile.ReplaceAll(".root", "_MuDst.root");
+	}else{
+		StPicoDstMaker *picoMaker = new StPicoDstMaker(StPicoDstMaker::IoRead,inputFile,"picoDst"); 
+		//StPicoDstMaker *picoMaker = new StPicoDstMaker(0,inputFile,"picoDst"); 
+
+		outputFile.ReplaceAll(".root", "_picoDst.root");
+	}
+
+	St_db_Maker *dbMk = new St_db_Maker("StarDb", "MySQL:StarDb", "$STAR/StarDb","StarDb");
+	//if(!iMuDst) dbMk->SetDateTime(20180101,0); //for run18 picoDst
 
 	// run19 AuAu 14.5(6) GeV st_physics 
 	vector<Int_t> processTrigIDs;
@@ -87,6 +124,7 @@ void doEvent(Int_t nEvents=100, const Char_t *inputFile="test.list", const TStri
 	miniTreeMaker->setFillTree(1);
 	miniTreeMaker->setFillTrkInfo(0);
 	miniTreeMaker->setFillHisto(1);
+	miniTreeMaker->setUseDefaultVtx(1);
 	//miniTreeMaker->setMaxVtxR(2.);
 	//miniTreeMaker->setMaxVtxZ(100.);
 	//miniTreeMaker->setMaxVzDiff(20.);
@@ -97,14 +135,14 @@ void doEvent(Int_t nEvents=100, const Char_t *inputFile="test.list", const TStri
 	//miniTreeMaker->setPrintMemory(1);
 	//miniTreeMaker->setPrintCpu(1);
 	//miniTreeMaker->setPrintConfig(1);
-	if(debug)
-		miniTreeMaker->SetDebug(1);
+	if(debug) miniTreeMaker->SetDebug(1);
 
 	if(chain->Init()==kStERR) return;
 	cout<<"chain->Init();"<<endl;
 
 	if(nEvents<0){
-		nEvents = picoMaker->chain()->GetEntries();
+		if(iMuDst) nEvents = microMaker->chain()->GetEntries();
+		else       nEvents = picoMaker->chain()->GetEntries();
 	}
 
 	cout << "****************************************** " << endl;

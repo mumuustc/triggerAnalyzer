@@ -2,7 +2,7 @@
 <!--
 <job maxEvents="40000" softLimits="true" fileListSyntax="xrootd" simulateSubmission ="false">
 -->
-<job maxFilesPerProcess="25" fileListSyntax="paths" simulateSubmission ="false">
+<job maxFilesPerProcess="5" fileListSyntax="paths" simulateSubmission ="false">
 
 	<command>
 
@@ -37,7 +37,7 @@
 		<!--
   	    <input URL="filelist:&dir;/test.list"/> 
 		-->
-  	    <input URL="filelist:&dir;/AuAu14p5_2019.list"/> 
+  	    <input URL="filelist:&dir;/&dataList;"/> 
 
 		<output fromScratch="*.root" toURL="file:&dir;/submitjob/rootfiles/"/>
 

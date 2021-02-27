@@ -4,7 +4,7 @@
 ClassImp(StMiniTreeMaker)
 
 //_____________________________________________________________________________
-StMiniTreeMaker::StMiniTreeMaker(const Char_t *name) : StMaker(name), mFillTree(1), mFillTrkInfo(1), mFillHisto(1), mPrintConfig(1), mPrintMemory(0), mPrintCpu(0), fOutFile(0), mOutFileName(""), mEvtTree(0), mMaxVtxR(1.e4), mMaxVtxZ(1.e4), mMaxVzDiff(1.e4), mMinTrkPt(0.2), mMaxTrkEta(1.), mMinNHitsFit(15), mMinNHitsFitRatio(0.52), mMinNHitsDedx(10), mMaxDca(10.), mMaxnSigmaE(3), mMaxBeta2TOF(0.03)
+StMiniTreeMaker::StMiniTreeMaker(const Char_t *name) : StMaker(name), mFillTree(1), mFillTrkInfo(1), mFillHisto(1), mPrintConfig(1), mPrintMemory(0), mPrintCpu(0), fOutFile(0), mOutFileName(""), mEvtTree(0), mDefaultVtx(1), mMaxVtxR(1.e4), mMaxVtxZ(1.e4), mMaxVzDiff(1.e4), mMinTrkPt(0.2), mMaxTrkEta(1.), mMinNHitsFit(15), mMinNHitsFitRatio(0.52), mMinNHitsDedx(10), mMaxDca(10.), mMaxnSigmaE(3), mMaxBeta2TOF(0.03)
 {
 	// default constructor
 
@@ -29,6 +29,12 @@ Int_t StMiniTreeMaker::Init()
 	//refMultCorr = new StRefMultCorr("grefmult_VpdMBnoVtx");
 
 	mEpdGeom = new StEpdGeom();
+
+	mEmcPosition = new StEmcPosition();
+	for(Int_t i=0;i<4;i++){
+		if(i==1) continue;
+		mEmcGeom[i] = StEmcGeom::getEmcGeom(detname[i].Data());
+	}
 
 	if(!mOutFileName.Length()){
 		LOG_ERROR << "StMiniTreeMaker:: no output file specified for tree and histograms." << endm;
@@ -59,26 +65,42 @@ Int_t StMiniTreeMaker::Finish()
 //_____________________________________________________________________________
 Int_t StMiniTreeMaker::Make()
 {
-	memset(&mEvtData, 0, sizeof(mEvtData)); //initial the mEvtData structure
+	memset(&mEvtData, 0, sizeof(mEvtData)); // all the variables in mEvtData structure are preset to be 0
 
 	StTimer timer;
 	if(mPrintMemory) StMemoryInfo::instance()->snapshot();
 	if(mPrintCpu)    timer.start();
 
+	mMuDstMaker = (StMuDstMaker *)GetMaker("MuDst");
 	mPicoDstMaker = (StPicoDstMaker *)GetMaker("picoDst");
+
 	if(mPicoDstMaker){
+		if(Debug()) LOG_INFO<<"Use Pico file as input"<<endm;
 		mPicoDst = mPicoDstMaker->picoDst();
 		if(!mPicoDst){
 			LOG_WARN<<"No PicoDst !"<<endm;
 			return kStOK;
 		}
 	}
+	else if(mMuDstMaker){
+		if(Debug()) LOG_INFO<<"Use MuDst file as input"<<endm;
+		mMuDst = mMuDstMaker->muDst();
+		if(!mMuDst){
+			LOG_WARN<<"No MuDst !"<<endm;
+			return kStOK;
+		}
+	}
 	else{
-		LOG_WARN<<"No StPicoDstMaker !"<<endm;
+		LOG_WARN<<"No StPicoDstMaker or StMuDstMaker!"<<endm;
 		return kStOK;
 	}
 
-	if(!processPicoEvent())  return kStOK;
+	if(mPicoDstMaker){
+		if(!processPicoEvent())  return kStOK;
+	}
+	else{
+		if(!processMuDstEvent()) return kStOK;
+	}
 
 	if(mFillTree) mEvtTree->Fill();
 
@@ -142,8 +164,8 @@ Bool_t StMiniTreeMaker::processPicoEvent()
 	mEvtData.mRunId    = mPicoEvt->runId();
 	mEvtData.mEventId  = mPicoEvt->eventId();
 	mEvtData.mBField   = mPicoEvt->bField();
-	mEvtData.mBbcRate  = mPicoEvt->BBCx();     // BBC coincidence rate represents luminosity
-	mEvtData.mZdcRate  = mPicoEvt->ZDCx();     // ZDC coincidence rate represents luminosity
+	mEvtData.mBbcRate  = mPicoEvt->BBCx(); // BBC coincidence rate represents luminosity
+	mEvtData.mZdcRate  = mPicoEvt->ZDCx(); // ZDC coincidence rate represents luminosity
 	mEvtData.mVpdVz    = mPicoEvt->vzVpd();
 
 	TVector3 vtxPos    = mPicoEvt->primaryVertex();
@@ -151,6 +173,7 @@ Bool_t StMiniTreeMaker::processPicoEvent()
 	mEvtData.mVertexY  = vtxPos.y();
 	mEvtData.mVertexZ  = vtxPos.z();
 	mEvtData.mVertexRanking  = mPicoEvt->ranking();
+
 	if(Debug()){
 		LOG_INFO<<"RunId: "<<mEvtData.mRunId<<endm;
 		LOG_INFO<<"EventId: "<<mEvtData.mEventId<<endm;
@@ -180,19 +203,18 @@ Bool_t StMiniTreeMaker::processPicoEvent()
 	mEvtData.mNBtofMatch      = mPicoEvt->nBTOFMatch();      // to check pileup effect
 	mEvtData.mOfflineBtofMult = mPicoEvt->btofTrayMultiplicity();
 
+	if(Debug()){
+		LOG_INFO<<"Online TofMult: "<<mEvtData.mOnlineBtofMult<<" \tOffline TofMult: "<<mEvtData.mOfflineBtofMult<<endm;
+	}
+
 	// VPD hits
 	mEvtData.mNVpdHitsEast = mPicoEvt->nVpdHitsEast();
 	mEvtData.mNVpdHitsWest = mPicoEvt->nVpdHitsWest();
 
-	// In principle, all these variables are preset to be 0 in memset(&mEvtData, 0, sizeof(mEvtData));
-	// BBC information
-	mEvtData.mNBbcHitsEast = 0;
-	mEvtData.mNBbcHitsWest = 0;
-	mEvtData.mMaxBbcAdcEast = 0;
-	mEvtData.mMaxBbcAdcWest = 0;
-	mEvtData.mTotalBbcAdcEast = 0;
-	mEvtData.mTotalBbcAdcWest = 0;
 	Int_t ie = 0, iw = 0;
+
+	// BBC information
+	// Note, all variables are preset to be 0 in memset(&mEvtData, 0, sizeof(mEvtData));
 	for(Int_t i=0; i<mNBbcTiles; i++){
 		if(mPicoEvt->bbcAdcEast(i) > 0){
 			mEvtData.mBbcAdcEast[ie]   = mPicoEvt->bbcAdcEast(i);
@@ -221,6 +243,9 @@ Bool_t StMiniTreeMaker::processPicoEvent()
 
 	mEvtData.mZdcSumAdcEast = mPicoEvt->ZdcSumAdcEast();
 	mEvtData.mZdcSumAdcWest = mPicoEvt->ZdcSumAdcWest();
+	//mEvtData.mZdcUnAttenuatedEast = mPicoEvt->zdcUnAttenuatedEast();
+	//mEvtData.mZdcUnAttenuatedWest = mPicoEvt->zdcUnAttenuatedWest();
+
 	for(Int_t i=0; i<mNZdcStrips; i++){
 		mEvtData.mZdcSmdEastHorizontal[i] = mPicoEvt->ZdcSmdEastHorizontal(i);
 		mEvtData.mZdcSmdEastVertical[i]   = mPicoEvt->ZdcSmdEastVertical(i);
@@ -229,7 +254,7 @@ Bool_t StMiniTreeMaker::processPicoEvent()
 	}
 
 	//refMultCorr->init(mEvtData.mRunId);
-	//refMultCorr->initEvent(mEvtData.mRefMult, mEvtData.mVertexZ, mEvtData.mZDCRate);
+	//refMultCorr->initEvent(mEvtData.mRefMult, mEvtData.mVertexZ, mEvtData.mZdcRate);
 	//mEvtData.mRefMultCorr   = refMultCorr->getRefMultCorr(); 
 	//mEvtData.mEvtWeight     = refMultCorr->getWeight();
 	//mEvtData.mCentrality    = refMultCorr->getCentralityBin16();
@@ -240,20 +265,17 @@ Bool_t StMiniTreeMaker::processPicoEvent()
 	//	hCentrality->Fill(mEvtData.mCentrality);
 	//}
 
-	// In principle, all these variables are preset to be 0 in memset(&mEvtData, 0, sizeof(mEvtData));
 	// EPD information
 	// check details in https://www.star.bnl.gov/webdata/dox/html/classStPicoEpdHit.html
-	mEvtData.mNEpdHitsEast = 0;
-	mEvtData.mNEpdHitsWest = 0;
-	mEvtData.mMaxEpdAdcEast = 0;
-	mEvtData.mMaxEpdAdcWest = 0;
-	mEvtData.mTotalEpdAdcEast = 0;
-	mEvtData.mTotalEpdAdcWest = 0;
+	// Note, all variables are preset to be 0 in memset(&mEvtData, 0, sizeof(mEvtData));
+	
 	ie = 0; iw = 0;
 
 	mEvtData.mNEpdHits = mPicoDst->numberOfEpdHits();
 	for(UInt_t i=0; i<mPicoDst->numberOfEpdHits(); i++){
 		StPicoEpdHit *epdHit = mPicoDst->epdHit(i);
+		if(!epdHit) continue;
+
 		mEvtData.mSide[i]     = epdHit->side();
 		mEvtData.mPosition[i] = epdHit->position();
 		mEvtData.mTile[i]     = epdHit->tile();
@@ -297,8 +319,12 @@ Bool_t StMiniTreeMaker::processPicoEvent()
 		hVzDiff->Fill(mEvtData.mVertexZ - mEvtData.mVpdVz);
 		hGRefMultVsRefMult->Fill(mEvtData.mRefMult, mEvtData.mGRefMult);
 		hNEpdHitsVsRefMult->Fill(mEvtData.mRefMult, mEvtData.mNEpdHits);
-		hNBtofMatchVsRefMult->Fill(mEvtData.mRefMult, mEvtData.mNBtofMatch);  // to check pileup effect
-		hNEpdHitsVsBtofMult->Fill(mEvtData.mOfflineBtofMult, mEvtData.mNEpdHits);
+		hNBtofMatchVsRefMult->Fill(mEvtData.mRefMult, mEvtData.mNBtofMatch);
+		hOfflineTofMultVsRefMult->Fill(mEvtData.mRefMult, mEvtData.mOfflineBtofMult);
+		hOnlineTofMultVsRefMult->Fill(mEvtData.mRefMult, mEvtData.mOnlineBtofMult);
+		hOnlineTofMultVsOfflineTofMult->Fill(mEvtData.mOfflineBtofMult, mEvtData.mOnlineBtofMult);
+		hNEpdHitsVsOfflineBtofMult->Fill(mEvtData.mOfflineBtofMult, mEvtData.mNEpdHits);
+		hNEpdHitsVsOnlineBtofMult->Fill(mEvtData.mOnlineBtofMult, mEvtData.mNEpdHits);
 		hTotalBbcAdcVsRefMult->Fill(mEvtData.mRefMult, mEvtData.mTotalBbcAdcEast + mEvtData.mTotalBbcAdcWest);
 		hTotalEpdAdcVsRefMult->Fill(mEvtData.mRefMult, mEvtData.mTotalEpdAdcEast + mEvtData.mTotalEpdAdcWest);
 		hBbcAdcWestVsBbcAdcEast->Fill(mEvtData.mTotalBbcAdcEast, mEvtData.mTotalBbcAdcWest);
@@ -316,7 +342,7 @@ Bool_t StMiniTreeMaker::processPicoEvent()
 
 	UShort_t nTrks = 0;
 	UShort_t nBEMCTrks = 0;
-	for(Int_t i=0;i<nNodes;i++){
+	for(Int_t i=0; i<nNodes; i++){
 		StPicoTrack *pTrack = mPicoDst->track(i);
 		if(!pTrack) continue;
 
@@ -409,7 +435,7 @@ Bool_t StMiniTreeMaker::processPicoEvent()
 				LOG_INFO<<"BEMC associated trkEta: "<<pTrack->pMom().PseudoRapidity()<<endm;
 				LOG_INFO<<"BEMC associated trkPhi: "<<pTrack->pMom().Phi()<<endm;
 				LOG_INFO<<"BEMC associated trkNHitsFit: "<<pTrack->nHitsFit()<<endm;
-				LOG_INFO<<"BEMC associated trkNHitsPoss: "<<pTrack->nHitsMax()<<endm;
+				LOG_INFO<<"BEMC associated trkNHitsMax: "<<pTrack->nHitsMax()<<endm;
 				LOG_INFO<<"BEMC associated trkNHitsFration: "<<pTrack->nHitsFit()*1./pTrack->nHitsMax()<<endm;
 				LOG_INFO<<"BEMC associated trkNHitsDedx: "<<pTrack->nHitsDedx()<<endm;
 				LOG_INFO<<"BEMC associated trkDca: "<<pTrack->gDCA(vtxPos).Mag()<<endm;
@@ -445,6 +471,366 @@ Bool_t StMiniTreeMaker::processPicoEvent()
 	return kTRUE;
 }
 //_____________________________________________________________________________
+Bool_t StMiniTreeMaker::processMuDstEvent()
+{
+	if(mFillHisto) hEvent->Fill(0.5);
+
+	StMuEvent *mMuEvent = mMuDst->event();
+	if(!mMuEvent){
+		LOG_WARN<<"No event level information !"<<endm;
+		return kFALSE;
+	}
+
+	Bool_t validTrigger = kFALSE;
+
+	Int_t nTrigs = 0;
+	if(mTriggerIDs.size() == 0){
+		validTrigger = kTRUE;
+
+		UIntVec triggerIds = mMuEvent->triggerIdCollection().nominal().triggerIds();
+		for(size_t i=0; i<triggerIds.size(); i++){
+			mEvtData.mTrigId[nTrigs] = triggerIds[i];
+			nTrigs++;
+		}
+	}
+	else{
+		for(size_t i=0; i<mTriggerIDs.size(); i++){
+			if(mMuEvent->triggerIdCollection().nominal().isTrigger(mTriggerIDs[i])){
+				validTrigger = kTRUE;
+
+				mEvtData.mTrigId[nTrigs] = mTriggerIDs[i];
+				nTrigs++;
+			}
+		}
+	}
+	mEvtData.mNTrigs = nTrigs;
+
+	if(!validTrigger){
+		LOG_WARN<<"No valid interested triggers !"<<endm;
+		return kFALSE;
+	}
+
+	if(mFillHisto){
+		if(validTrigger) hEvent->Fill(2.5);
+	}
+
+	//select the right vertex using VPD
+	Float_t vpdVz = -999; 
+	StBTofHeader *mBTofHeader = mMuDst->btofHeader();
+	if(mBTofHeader) vpdVz = mBTofHeader->vpdVz();
+	for(UInt_t i=0; !mDefaultVtx && i<mMuDst->numberOfPrimaryVertices(); i++){
+		StMuPrimaryVertex *vtx = mMuDst->primaryVertex(i);
+		if(!vtx) continue;
+		Float_t vz = vtx->position().z();
+		if(fabs(vpdVz)<200 && fabs(vpdVz-vz)<3.){
+			mMuDst->setVertexIndex(i); 
+			break;
+		}
+	}
+
+	mEvtData.mRunId          = mMuEvent->runId();
+	mEvtData.mEventId        = mMuEvent->eventId();
+	mEvtData.mBField         = mMuEvent->runInfo().magneticField();
+	mEvtData.mBbcRate        = mMuEvent->runInfo().bbcCoincidenceRate(); // BBC coincidence rate represents luminosity
+	mEvtData.mZdcRate        = mMuEvent->runInfo().zdcCoincidenceRate(); // ZDC coincidence rate represents luminosity
+	mEvtData.mVpdVz          = vpdVz;
+
+	StThreeVectorF vtxPos    = mMuEvent->primaryVertexPosition();
+	mEvtData.mVertexX        = vtxPos.x();
+	mEvtData.mVertexY        = vtxPos.y();
+	mEvtData.mVertexZ        = vtxPos.z();
+
+	StMuPrimaryVertex *vtx = mMuDst->primaryVertex();
+	if(vtx){
+		mEvtData.mVertexRanking = vtx->ranking();
+		mEvtData.mNBemcMatch    = vtx->nBEMCMatch();  // to check pileup effect
+		mEvtData.mNBtofMatch    = vtx->nBTOFMatch();  // to check pileup effect
+	}
+	else{
+		mEvtData.mVertexRanking = -999;
+	}
+
+	if(Debug()){
+		LOG_INFO<<"RunId: "<<mEvtData.mRunId<<endm;
+		LOG_INFO<<"EventId: "<<mEvtData.mEventId<<endm;
+		LOG_INFO<<"mZDCX: "<<mEvtData.mZdcRate<<endm;
+		LOG_INFO<<"VPD Vz: "<<mEvtData.mVpdVz<<" \tTPC Vz: "<<mEvtData.mVertexZ<<endm;
+	}
+
+	if(TMath::Abs(vtxPos.x())<1.e-5 && TMath::Abs(vtxPos.y())<1.e-5 && TMath::Abs(vtxPos.z())<1.e-5) return kFALSE;
+	if(mFillHisto) hEvent->Fill(4.5);
+	if(sqrt(vtxPos.x()*vtxPos.x()+vtxPos.y()*vtxPos.y())>=mMaxVtxR) return kFALSE;
+	if(mFillHisto) hEvent->Fill(5.5);
+	if(TMath::Abs(vtxPos.z())>=mMaxVtxZ) return kFALSE;
+	if(mFillHisto) hEvent->Fill(6.5);
+	if(TMath::Abs(mEvtData.mVertexZ - mEvtData.mVpdVz)>=mMaxVzDiff) return kFALSE;
+	if(mFillHisto) hEvent->Fill(7.5);
+
+	// check refmult definition in https://www.star.bnl.gov/webdata/dox/html/StPicoUtilities_8h_source.html
+	// https://www.star.bnl.gov/webdata/dox/html/StMuEvent_8cxx_source.html
+	mEvtData.mGRefMult        = mMuEvent->grefmult();        // gRefMult (|eta|<0.5)
+	mEvtData.mRefMult         = mMuEvent->refMult();         // RefMult (|eta|<0.5) 
+	// check how to calculate mRefMult2, mRefMult2East, mRefMult2West, mRefMultHalfEast, and mRefMultHalfWest in StPicoUtilities.h if needed
+	mEvtData.mOfflineBtofMult = mMuEvent->btofTrayMultiplicity();
+	mEvtData.mOnlineBtofMult  = mMuEvent->triggerData()->tofMultiplicity();
+
+	if(Debug()){
+		LOG_INFO<<"Online TofMult: "<<mEvtData.mOnlineBtofMult<<" \tOffline TofMult: "<<mEvtData.mOfflineBtofMult<<endm;
+	}
+
+	// VPD hits
+	if(mBTofHeader){
+		mEvtData.mNVpdHitsEast = mBTofHeader->numberOfVpdHits(east);
+		mEvtData.mNVpdHitsWest = mBTofHeader->numberOfVpdHits(west);
+	}
+
+	Int_t ie = 0, iw = 0;
+
+	// BBC information
+	// Note, all variables are preset to be 0 in memset(&mEvtData, 0, sizeof(mEvtData));
+	StBbcTriggerDetector &bbc = mMuEvent->bbcTriggerDetector();
+	for(UInt_t iPMT=0; iPMT<bbc.numberOfPMTs(); ++iPMT){
+		UInt_t const eastWest = (iPMT<24) ? 0 : 1;  // East: 0-23, West: 24-47
+
+		if(bbc.adc(iPMT) > 0){
+			if(eastWest == 0){ //East
+				mEvtData.mBbcAdcEast[ie]   = bbc.adc(iPMT);
+				mEvtData.mTotalBbcAdcEast += bbc.adc(iPMT);
+
+				if(mEvtData.mMaxBbcAdcEast < bbc.adc(iPMT)){
+					mEvtData.mMaxBbcAdcEast = bbc.adc(iPMT);
+				}
+
+				ie++;
+			}
+			else{ //West
+				mEvtData.mBbcAdcWest[iw]   = bbc.adc(iPMT);
+				mEvtData.mTotalBbcAdcWest += bbc.adc(iPMT);
+
+				if(mEvtData.mMaxBbcAdcWest < bbc.adc(iPMT)){
+					mEvtData.mMaxBbcAdcWest = bbc.adc(iPMT);
+				}
+
+				iw++;
+			}
+		}
+	}
+	mEvtData.mNBbcHitsEast = ie;
+	mEvtData.mNBbcHitsWest = iw;
+
+	StZdcTriggerDetector &zdc = mMuEvent->zdcTriggerDetector();
+	mEvtData.mZdcSumAdcEast = zdc.adcSum(east);
+	mEvtData.mZdcSumAdcWest = zdc.adcSum(west);
+	mEvtData.mZdcUnAttenuatedEast = mMuEvent->triggerData()->zdcUnAttenuated(east);
+	mEvtData.mZdcUnAttenuatedWest = mMuEvent->triggerData()->zdcUnAttenuated(west);
+
+	//Loop over all zdc strips
+	for(int iStrip=1; iStrip<mNZdcStrips+1; ++iStrip) {
+		mEvtData.mZdcSmdEastHorizontal[iStrip-1] = zdc.zdcSmd(east, 1, iStrip);
+		mEvtData.mZdcSmdEastVertical[iStrip-1]   = zdc.zdcSmd(east, 0, iStrip);
+		mEvtData.mZdcSmdWestHorizontal[iStrip-1] = zdc.zdcSmd(west, 1, iStrip);
+		mEvtData.mZdcSmdWestVertical[iStrip-1]   = zdc.zdcSmd(west, 0, iStrip);
+	} 
+
+	//refMultCorr->init(mEvtData.mRunId);
+	//refMultCorr->initEvent(mEvtData.mRefMult, mEvtData.mVertexZ, mEvtData.mZdcRate);
+	//mEvtData.mRefMultCorr   = refMultCorr->getRefMultCorr(); 
+	//mEvtData.mEvtWeight     = refMultCorr->getWeight();
+	//mEvtData.mCentrality    = refMultCorr->getCentralityBin16();
+	//if(Debug()) LOG_INFO<<"refMult: "<<mEvtData.mRefMult<<" \t refMultCorr: "<<mEvtData.mRefMultCorr<<" \t mCentrality: "<<mEvtData.mCentrality<<endm;
+
+	//if(mFillHisto){
+	//	hRefMultVsRefMultCorr->Fill(mEvtData.mRefMultCorr, mEvtData.mRefMult);
+	//	hCentrality->Fill(mEvtData.mCentrality);
+	//}
+
+	// EPD information
+	// check details in https://www.star.bnl.gov/webdata/dox/html/classStPicoEpdHit.html
+	// Note, all variables are preset to be 0 in memset(&mEvtData, 0, sizeof(mEvtData));
+	
+	ie = 0; iw = 0;
+
+	TVector3 pVtxPos(mEvtData.mVertexX, mEvtData.mVertexY, mEvtData.mVertexZ);
+
+	mEvtData.mNEpdHits = mMuDst->numberOfEpdHit();
+	for(UInt_t i=0; i<mMuDst->numberOfEpdHit(); i++){
+		StMuEpdHit *epdHit = mMuDst->epdHit(i);
+		if(!epdHit) continue;
+
+		mEvtData.mSide[i]     = epdHit->side();
+		mEvtData.mPosition[i] = epdHit->position();
+		mEvtData.mTile[i]     = epdHit->tile();
+		mEvtData.mRow[i]      = epdHit->tile()/2 + 1;
+		mEvtData.mADC[i]      = epdHit->adc();
+		mEvtData.mTAC[i]      = epdHit->tac();
+		mEvtData.mTDC[i]      = epdHit->tdc();
+		mEvtData.mHasTAC[i]   = epdHit->hasTac();
+		mEvtData.mNMIP[i]     = epdHit->nMIP();
+		//mEvtData.mTnMIP[i]    = epdHit->TnMIP(2, 0.3); // you can re-evaluate this variable offline, see this function in https://www.star.bnl.gov/webdata/dox/html/StPicoEpdHit_8h_source.html. NOTE, this function requires STAR library >= SL20d
+		if(epdHit->nMIP()<0.3) mEvtData.mTnMIP[i] = 0;
+		else                   mEvtData.mTnMIP[i] = epdHit->nMIP()<2 ? epdHit->nMIP() : 2;
+		mEvtData.mStatusIsGood[i] = epdHit->isGood();
+
+		TVector3 StraightLine = mEpdGeom->TileCenter(epdHit->id()) - pVtxPos;
+		//TVector3 StraightLine = mEpdGeom->TileCenter(epdHit->position(), epdHit->tile(), epdHit->side()) - pVtxPos;
+		mEvtData.mEpdEta[i] = StraightLine.Eta();
+		mEvtData.mEpdPhi[i] = StraightLine.Phi();
+
+		if(epdHit->side()<0){
+			mEvtData.mTotalEpdAdcEast += epdHit->adc();
+			if(mEvtData.mMaxEpdAdcEast < epdHit->adc()){
+				mEvtData.mMaxEpdAdcEast = epdHit->adc();
+			}
+
+			ie++;
+		}
+
+		if(epdHit->side()>0){
+			mEvtData.mTotalEpdAdcWest += epdHit->adc();
+			if(mEvtData.mMaxEpdAdcWest < epdHit->adc()){
+				mEvtData.mMaxEpdAdcWest = epdHit->adc();
+			}
+
+			iw++;
+		}
+	}
+	mEvtData.mNEpdHitsEast = ie;
+	mEvtData.mNEpdHitsWest = iw;
+
+	if(mFillHisto){
+		hVPDVzVsTPCVz->Fill(mEvtData.mVertexZ, mEvtData.mVpdVz);
+		hVzDiff->Fill(mEvtData.mVertexZ - mEvtData.mVpdVz);
+		hGRefMultVsRefMult->Fill(mEvtData.mRefMult, mEvtData.mGRefMult);
+		hNEpdHitsVsRefMult->Fill(mEvtData.mRefMult, mEvtData.mNEpdHits);
+		hNBtofMatchVsRefMult->Fill(mEvtData.mRefMult, mEvtData.mNBtofMatch);
+		hOfflineTofMultVsRefMult->Fill(mEvtData.mRefMult, mEvtData.mOfflineBtofMult);
+		hOnlineTofMultVsRefMult->Fill(mEvtData.mRefMult, mEvtData.mOnlineBtofMult);
+		hOnlineTofMultVsOfflineTofMult->Fill(mEvtData.mOfflineBtofMult, mEvtData.mOnlineBtofMult);
+		hNEpdHitsVsOfflineBtofMult->Fill(mEvtData.mOfflineBtofMult, mEvtData.mNEpdHits);
+		hNEpdHitsVsOnlineBtofMult->Fill(mEvtData.mOnlineBtofMult, mEvtData.mNEpdHits);
+		hTotalBbcAdcVsRefMult->Fill(mEvtData.mRefMult, mEvtData.mTotalBbcAdcEast + mEvtData.mTotalBbcAdcWest);
+		hTotalEpdAdcVsRefMult->Fill(mEvtData.mRefMult, mEvtData.mTotalEpdAdcEast + mEvtData.mTotalEpdAdcWest);
+		hBbcAdcWestVsBbcAdcEast->Fill(mEvtData.mTotalBbcAdcEast, mEvtData.mTotalBbcAdcWest);
+		hEpdAdcWestVsEpdAdcEast->Fill(mEvtData.mTotalEpdAdcEast, mEvtData.mTotalEpdAdcWest);
+		hBbcAdcEastVsEpdAdcEast->Fill(mEvtData.mTotalEpdAdcEast, mEvtData.mTotalBbcAdcEast);
+		hBbcAdcWestVsEpdAdcWest->Fill(mEvtData.mTotalEpdAdcWest, mEvtData.mTotalBbcAdcWest);
+	}
+
+	if(!mFillTrkInfo)  return kTRUE;
+
+	Int_t nNodes = mMuDst->numberOfPrimaryTracks();
+	if(Debug()){
+		LOG_INFO<<"# of primary Tracks in muDst: "<<nNodes<<endm;
+	}
+
+	Short_t nTrks    = 0;
+	Short_t nBEMCTrks = 0;
+	for(Int_t i=0; i<nNodes; i++){
+		StMuTrack* pMuTrack = mMuDst->primaryTracks(i);
+		if(!pMuTrack) continue;
+
+		StMuTrack* gMuTrack = (StMuTrack *)pMuTrack->globalTrack();
+		if(!gMuTrack) continue;
+
+		if(!isValidTrack(pMuTrack)) continue;
+
+		mEvtData.mTrkId[nTrks]            = i;  
+		mEvtData.mTPCeTrkFlag[nTrks]      = kFALSE;
+		mEvtData.mBEMCTraitsIndex[nTrks]  = -999;
+
+		mEvtData.mCharge[nTrks]           = pMuTrack->charge();
+
+		// Calculate global momentum and position at point of DCA to the primaryVertex
+		StThreeVectorF pMom               = pMuTrack->p();
+		StPhysicalHelixD gHelix           = gMuTrack->helix(); // Return inner helix (first measured point)
+		gHelix.moveOrigin(gHelix.pathLength(vtxPos));
+		StThreeVectorF gMom               = gHelix.momentum(mEvtData.mBField*kilogauss);
+		StThreeVectorF origin             = gHelix.origin();
+
+		mEvtData.mPt[nTrks]               = pMom.perp();
+		mEvtData.mEta[nTrks]              = pMom.pseudoRapidity();
+		mEvtData.mPhi[nTrks]              = pMom.phi();
+		mEvtData.mgPt[nTrks]              = gMom.perp();
+		mEvtData.mgEta[nTrks]             = gMom.pseudoRapidity();
+		mEvtData.mgPhi[nTrks]             = gMom.phi();
+		mEvtData.mgOriginX[nTrks]         = origin.x();
+		mEvtData.mgOriginY[nTrks]         = origin.y();
+		mEvtData.mgOriginZ[nTrks]         = origin.z();
+
+		mEvtData.mNHitsFit[nTrks]         = pMuTrack->nHitsFit(kTpcId);
+		mEvtData.mNHitsMax[nTrks]         = pMuTrack->nHitsPoss(kTpcId);
+		mEvtData.mNHitsDedx[nTrks]        = pMuTrack->nHitsDedx();
+		mEvtData.mDedx[nTrks]             = pMuTrack->dEdx()*1.e6; 
+		mEvtData.mNSigmaE[nTrks]          = pMuTrack->nSigmaElectron();
+		mEvtData.mDca[nTrks]              = pMuTrack->dcaGlobal().mag();
+
+		//UInt_t  mMap0                     = (UInt_t)(gMuTrack->topologyMap().data(0));
+		//UChar_t mHftHitsMap               = mMap0>>1 & 0x7F;
+		//Bool_t  mHasPxl1Hit               = mHftHitsMap>>0 & 0x1;
+		//Bool_t  mHasPxl2Hit               = mHftHitsMap>>1 & 0x3;
+		//Bool_t  mHasIstHit                = mHftHitsMap>>3 & 0x3;
+		//Bool_t  mHasSstHit                = mHftHitsMap>>5 & 0x3;
+		//mEvtData.mIsHFTTrk[nTrks]         = mHasPxl1Hit && mHasPxl2Hit && (mHasIstHit || mHasSstHit);
+		//mEvtData.mHasHFT4Layers[nTrks]    = mHasPxl1Hit && mHasPxl2Hit && mHasIstHit && mHasSstHit;
+
+		if(mFillHisto){
+			hChargePt->Fill(mEvtData.mPt[nTrks]*mEvtData.mCharge[nTrks]);
+			hdEdxVsP->Fill(pMom.mag(), mEvtData.mDedx[nTrks]);
+			hnSigEVsP->Fill(pMom.mag(), mEvtData.mNSigmaE[nTrks]);
+		}
+
+		mEvtData.mTOFMatchFlag[nTrks] = -1;
+		mEvtData.mTOFLocalY[nTrks] = -999.;
+		mEvtData.mBeta2TOF[nTrks] = -999.;
+		if( &(pMuTrack->btofPidTraits()) ){
+			const StMuBTofPidTraits& btofPidTraits = pMuTrack->btofPidTraits();
+			mEvtData.mTOFMatchFlag[nTrks] = btofPidTraits.matchFlag(); 
+			mEvtData.mTOFLocalY[nTrks] = btofPidTraits.yLocal();
+			mEvtData.mBeta2TOF[nTrks] = btofPidTraits.beta();
+			if(mFillHisto){
+				hBetaVsP->Fill(pMom.mag(), 1./mEvtData.mBeta2TOF[nTrks]);
+				if(mEvtData.mBeta2TOF[nTrks]>0 && TMath::Abs(1.-1./mEvtData.mBeta2TOF[nTrks])<=0.025){
+					hnSigEVsP_wBetaCut->Fill(pMom.mag(), mEvtData.mNSigmaE[nTrks]);
+				}
+			}
+		}
+
+		if(
+				TMath::Abs(mEvtData.mNSigmaE[nTrks])<=mMaxnSigmaE
+				&& mEvtData.mBeta2TOF[nTrks]>0.
+				&& TMath::Abs(1.-1./mEvtData.mBeta2TOF[nTrks])<=mMaxBeta2TOF
+		  ){
+			mEvtData.mTPCeTrkFlag[nTrks] = kTRUE;
+		}
+
+		//if(
+		//		mEvtData.mPt[nTrks]>1.5
+		//		&& TMath::Abs(mEvtData.mNSigmaE[nTrks])<=mMaxnSigmaE
+		//  ){
+		//	getBemcInfo(pMuTrack,nTrks,nBEMCTrks,kFALSE);
+		//}
+		getBemcInfo(pMuTrack,nTrks,nBEMCTrks,kFALSE);
+
+		if(
+				mEvtData.mTPCeTrkFlag[nTrks] 
+				|| mEvtData.mBEMCTraitsIndex[nTrks]>=0
+		  ){
+			nTrks++;
+		}
+	}
+
+	//if(nTrks==0 ) return kFALSE;
+
+	mEvtData.mNTrks         = nTrks;
+	mEvtData.mNBEMCTrks     = nBEMCTrks;
+	if(Debug()){
+		LOG_INFO<<"# of primary tracks stored: "<<mEvtData.mNTrks<<endm;
+		LOG_INFO<<"# of EMC matched Tracks stored: "<<mEvtData.mNBEMCTrks<<endm;
+	}
+
+	return kTRUE;
+}
+//_____________________________________________________________________________
 Bool_t StMiniTreeMaker::isValidTrack(StPicoTrack *pTrack, TVector3 vtxPos) const
 {
 	Float_t pt  = pTrack->pMom().Perp();
@@ -459,6 +845,150 @@ Bool_t StMiniTreeMaker::isValidTrack(StPicoTrack *pTrack, TVector3 vtxPos) const
 	if(dca>mMaxDca)                             return kFALSE;
 
 	return kTRUE;
+}
+//_____________________________________________________________________________
+Bool_t StMiniTreeMaker::isValidTrack(StMuTrack *pMuTrack) const
+{
+	Float_t pt  = pMuTrack->pt();
+	Float_t eta = pMuTrack->eta(); 
+	Float_t dca = pMuTrack->dcaGlobal().mag();
+
+	if(pt<mMinTrkPt)                            return kFALSE;
+	if(TMath::Abs(eta)>mMaxTrkEta)              return kFALSE;
+	if(pMuTrack->nHitsFit(kTpcId)<mMinNHitsFit) return kFALSE;
+	if(pMuTrack->nHitsFit(kTpcId)*1./pMuTrack->nHitsPoss(kTpcId)<mMinNHitsFitRatio)  return kFALSE;
+	if(pMuTrack->nHitsDedx()<mMinNHitsDedx)     return kFALSE;
+	if(dca>mMaxDca)                             return kFALSE;
+
+	return kTRUE;
+}
+//_____________________________________________________________________________
+Bool_t StMiniTreeMaker::getBemcInfo(StMuTrack *pMuTrack, const Short_t nTrks, Short_t &nBEMCTrks, Bool_t flag)
+{
+
+	Float_t maxtowerE = -999., energy = 0.;
+	Float_t zdist = -999., phidist = -999., mindist = 999.;
+	Int_t mod = -1, eta=-1, sub=-1;
+	Int_t neta = -1, nphi=-1;
+	UInt_t maxadc = 0;
+
+	mEmcCollection = mMuDst->emcCollection();
+	if(!mEmcCollection) {
+		LOG_WARN << " No Emc Collection for this event " << endm;
+		return kFALSE;
+	}
+
+	StThreeVectorD position, momentum;
+	StThreeVectorD positionBSMDE, momentumBSMDE;
+	StThreeVectorD positionBSMDP, momentumBSMDP;
+
+	Double_t bField = mMuDst->event()->runInfo().magneticField()/10.; //Tesla
+	Bool_t ok       = kFALSE;
+	Bool_t okBSMDE  = kFALSE;
+	Bool_t okBSMDP  = kFALSE;
+	if(mEmcPosition) {
+		ok      = mEmcPosition->projTrack(&position, &momentum, pMuTrack, bField, mEmcGeom[0]->Radius());
+		okBSMDE = mEmcPosition->projTrack(&positionBSMDE, &momentumBSMDE, pMuTrack, bField, mEmcGeom[2]->Radius());
+		okBSMDP = mEmcPosition->projTrack(&positionBSMDP, &momentumBSMDP, pMuTrack, bField, mEmcGeom[3]->Radius());
+	}
+	if(!ok) {
+		LOG_WARN << " Projection failed for this track ... " << endm;
+		return kFALSE;
+	}
+
+	Bool_t bemcMatchFlag = kFALSE;
+	if(ok && okBSMDE && okBSMDP){
+
+		StSPtrVecEmcPoint& bEmcPoints = mEmcCollection->barrelPoints();
+		mindist=1.e9;
+		mEmcGeom[0]->getBin(positionBSMDP.phi(), positionBSMDE.pseudoRapidity(), mod, eta, sub); //project on SMD plan
+		for(StSPtrVecEmcPointIterator it = bEmcPoints.begin(); it != bEmcPoints.end(); it++) {
+			Bool_t associatedPoint = kFALSE;
+			StPtrVecEmcCluster& bEmcClusters = (*it)->cluster(kBarrelEmcTowerId);
+			if(bEmcClusters.size()==0 ) continue;
+			if(bEmcClusters[0]==NULL) continue;
+			for(StPtrVecEmcClusterIterator cIter = bEmcClusters.begin(); cIter != bEmcClusters.end(); cIter++){
+				Bool_t associatedCluster = kFALSE;
+				StPtrVecEmcRawHit& bEmcHits = (*cIter)->hit();
+				for(StPtrVecEmcRawHitIterator hIter = bEmcHits.begin(); hIter != bEmcHits.end(); hIter++) {
+					if(mod == (Int_t)(*hIter)->module() && eta == (Int_t)(*hIter)->eta() && sub == (Int_t)(*hIter)->sub()) {
+						bemcMatchFlag = kTRUE;
+						associatedPoint = kTRUE;
+						associatedCluster = kTRUE;
+						break;
+					}
+				}
+				if(associatedCluster) {
+					for(StPtrVecEmcRawHitIterator hitit=bEmcHits.begin(); hitit!=bEmcHits.end();hitit++) {
+						if((*hitit)->energy()>maxtowerE) maxtowerE = (*hitit)->energy();
+						if((*hitit)->adc()>maxadc) maxadc = (*hitit)->adc();
+					}
+				}
+			}
+
+			StPtrVecEmcCluster& smdeClusters = (*it)->cluster(kBarrelSmdEtaStripId);
+			StPtrVecEmcCluster& smdpClusters = (*it)->cluster(kBarrelSmdPhiStripId);
+
+			if(associatedPoint) {
+				energy += (*it)->energy(); //use point's energy, not tower cluster's energy
+
+				float deltaphi=(*it)->position().phi()-positionBSMDP.phi();
+				if(deltaphi>=TMath::Pi()) deltaphi=deltaphi-TMath::TwoPi();
+				if(deltaphi<-TMath::Pi()) deltaphi=deltaphi+TMath::TwoPi();
+
+				float rsmdp=mEmcGeom[3]->Radius();
+				float pointz=(*it)->position().z();
+				float deltaz=pointz-positionBSMDE.z();
+				if(sqrt(deltaphi*deltaphi*rsmdp*rsmdp+deltaz*deltaz)<mindist) {
+					phidist=deltaphi;
+					zdist  =deltaz;
+					if(smdeClusters.size()>=1) neta=smdeClusters[0]->nHits();
+					if(smdpClusters.size()>=1) nphi=smdpClusters[0]->nHits();
+					mindist=sqrt(deltaphi*deltaphi*rsmdp*rsmdp+deltaz*deltaz);
+				}
+			}//associated
+		}
+	} // end if (ok && okBSMDE && okBSMDP)
+
+	if(flag) return bemcMatchFlag;
+
+	if(bemcMatchFlag && !flag){
+		mEvtData.mBEMCTraitsIndex[nTrks]  = nBEMCTrks;
+		mEvtData.mBEMCTrkIndex[nBEMCTrks] = nTrks;
+		mEvtData.mBEMCAdc0[nBEMCTrks]     = maxadc;
+		mEvtData.mBEMCE0[nBEMCTrks]       = maxtowerE;
+		mEvtData.mBEMCE[nBEMCTrks]        = energy;
+		mEvtData.mBEMCZDist[nBEMCTrks]    = zdist;	
+		mEvtData.mBEMCPhiDist[nBEMCTrks]  = phidist;
+		mEvtData.mBEMCnEta[nBEMCTrks]     = neta;
+		mEvtData.mBEMCnPhi[nBEMCTrks]     = nphi;
+		mEvtData.mNSigmaPi[nBEMCTrks]     = pMuTrack->nSigmaPion();
+		mEvtData.mNSigmaK[nBEMCTrks]      = pMuTrack->nSigmaKaon();
+		mEvtData.mNSigmaP[nBEMCTrks]      = pMuTrack->nSigmaProton();
+
+		if(Debug()){
+			LOG_INFO<<"BEMC associated trkId: "<<pMuTrack->id()<<endm;
+			LOG_INFO<<"BEMC associated trkPt: "<<pMuTrack->pt()<<endm;
+			LOG_INFO<<"BEMC associated trkEta: "<<pMuTrack->eta()<<endm;
+			LOG_INFO<<"BEMC associated trkPhi: "<<pMuTrack->phi()<<endm;
+			LOG_INFO<<"BEMC associated trkNHitsFit: "<<pMuTrack->nHitsFit(kTpcId)<<endm;
+			LOG_INFO<<"BEMC associated trkNHitsPoss: "<<pMuTrack->nHitsPoss(kTpcId)<<endm;
+			LOG_INFO<<"BEMC associated trkNHitsFration: "<<pMuTrack->nHitsFit(kTpcId)*1./pMuTrack->nHitsPoss(kTpcId)<<endm;
+			LOG_INFO<<"BEMC associated trkNHitsDedx: "<<pMuTrack->nHitsDedx()<<endm;
+			LOG_INFO<<"BEMC associated trkDca: "<<pMuTrack->dcaGlobal().mag()<<endm;
+			LOG_INFO<<"BEMC Adc0: "<<mEvtData.mBEMCAdc0[nBEMCTrks]<<endm;
+			LOG_INFO<<"BEMC E0: "<<mEvtData.mBEMCE0[nBEMCTrks]<<endm;
+			LOG_INFO<<"BEMC E: "<<mEvtData.mBEMCE[nBEMCTrks]<<endm;
+			LOG_INFO<<"BEMC ZDist: "<<mEvtData.mBEMCZDist[nBEMCTrks]<<endm;
+			LOG_INFO<<"BEMC PhiDist: "<<mEvtData.mBEMCPhiDist[nBEMCTrks]<<endm;
+			LOG_INFO<<"BEMC nEta: "<<(Int_t)mEvtData.mBEMCnEta[nBEMCTrks]<<endm;
+			LOG_INFO<<"BEMC nPhi: "<<(Int_t)mEvtData.mBEMCnPhi[nBEMCTrks]<<endm;
+		}
+
+		nBEMCTrks++;
+	};
+
+	return bemcMatchFlag;
 }
 //_____________________________________________________________________________
 void StMiniTreeMaker::bookTree()
@@ -491,6 +1021,7 @@ void StMiniTreeMaker::bookTree()
 	mEvtTree->Branch("mRefMultHalfWest", &mEvtData.mRefMultHalfWest, "mRefMultHalfWest/I");
 	mEvtTree->Branch("mNBemcMatch", &mEvtData.mNBemcMatch, "mNBemcMatch/s");
 	mEvtTree->Branch("mNBtofMatch", &mEvtData.mNBtofMatch, "mNBtofMatch/s");
+	mEvtTree->Branch("mOnlineBtofMult", &mEvtData.mOnlineBtofMult, "mOnlineBtofMult/s");
 	mEvtTree->Branch("mOfflineBtofMult", &mEvtData.mOfflineBtofMult, "mOfflineBtofMult/s");
 	mEvtTree->Branch("mRefMultCorr", &mEvtData.mRefMultCorr, "mRefMultCorr/F");
 	mEvtTree->Branch("mEvtWeight", &mEvtData.mEvtWeight, "mEvtWeight/F");
@@ -512,6 +1043,8 @@ void StMiniTreeMaker::bookTree()
 	// ZDC ADC information
 	mEvtTree->Branch("mZdcSumAdcEast", &mEvtData.mZdcSumAdcEast, "mZdcSumAdcEast/F");
 	mEvtTree->Branch("mZdcSumAdcWest", &mEvtData.mZdcSumAdcWest, "mZdcSumAdcWest/F");
+	mEvtTree->Branch("mZdcUnAttenuatedEast", &mEvtData.mZdcUnAttenuatedEast, "mZdcUnAttenuatedEast/F");
+	mEvtTree->Branch("mZdcUnAttenuatedWest", &mEvtData.mZdcUnAttenuatedWest, "mZdcUnAttenuatedWest/F");
 	mEvtTree->Branch("mZdcSmdEastHorizontal", mEvtData.mZdcSmdEastHorizontal, "mZdcSmdEastHorizontal[8]/F");
 	mEvtTree->Branch("mZdcSmdEastVertical", mEvtData.mZdcSmdEastVertical, "mZdcSmdEastVertical[8]/F");
 	mEvtTree->Branch("mZdcSmdWestHorizontal", mEvtData.mZdcSmdWestHorizontal, "mZdcSmdWestHorizontal[8]/F");
@@ -600,7 +1133,11 @@ void StMiniTreeMaker::bookHistos()
 	hGRefMultVsRefMult      = new TH2D("hGRefMultVsRefMult","hGRefMultVsRefMult; refMult; grefMult",1000,0,1000,1000,0,1000);
 	hNEpdHitsVsRefMult      = new TH2D("hNEpdHitsVsRefMult","hNEpdHitsVsRefMult; refMult; nEpdHits",1000,0,1000,1000,0,1000);
 	hNBtofMatchVsRefMult    = new TH2D("hNBtofMatchVsRefMult","hNBtofMatchVsRefMult; refMult; nBtofMatch",1000,0,1000,1000,0,1000);
-	hNEpdHitsVsBtofMult     = new TH2D("hNEpdHitsVsBtofMult","hNEpdHitsVsBtofMult; btofMult; nEpdHits",1000,0,1000,1000,0,1000);
+	hOnlineTofMultVsRefMult  = new TH2D("hOnlineTofMultVsRefMult","hOnlineTofMultVsRefMult; refMult; tofMult^{online}",1000,0,1000,1000,0,1000);
+	hOfflineTofMultVsRefMult = new TH2D("hOfflineTofMultVsRefMult","hOfflineTofMultVsRefMult; refMult; tofMult^{offline}",1000,0,1000,1000,0,1000);
+	hOnlineTofMultVsOfflineTofMult = new TH2D("hOnlineTofMultVsOfflineTofMult","hOnlineTofMultVsOfflineTofMult; tofMult^{offline}; tofMult^{online}",1000,0,1000,1000,0,1000);
+	hNEpdHitsVsOfflineBtofMult     = new TH2D("hNEpdHitsVsOfflineBtofMult","hNEpdHitsVsOfflineBtofMult; btofMult^{offline}; nEpdHits",1000,0,1000,1000,0,1000);
+	hNEpdHitsVsOnlineBtofMult     = new TH2D("hNEpdHitsVsOnlineBtofMult","hNEpdHitsVsOnlineBtofMult; btofMult^{online}; nEpdHits",1000,0,1000,1000,0,1000);
 	hTotalBbcAdcVsRefMult   = new TH2D("hTotalBbcAdcVsRefMult","hTotalBbcAdcVsRefMult; refMult; Total BBC ADC",1000,0,1000,1000,0,100000);
 	hTotalEpdAdcVsRefMult   = new TH2D("hTotalEpdAdcVsRefMult","hTotalEpdAdcVsRefMult; refMult; Total EPD ADC",1000,0,1000,1000,0,100000);
 	hBbcAdcWestVsBbcAdcEast = new TH2D("hBbcAdcWestVsBbcAdcEast","hBbcAdcWestVsBbcAdcEast; East Total BBC ADC; West Total BBC ADC",1000,0,50000,1000,0,50000);
@@ -625,6 +1162,7 @@ void StMiniTreeMaker::printConfig()
 	printf("=== Configuration for StMiniTreeMaker ===\n");
 	printf("Fill the miniDst tree: %s\n",decision[mFillTree]);
 	printf("Fill the QA histo: %s\n",decision[mFillHisto]);
+	printf("Use default vertex: %s\n",decision[mDefaultVtx]);
 	printf("Maximum |Vr|: %1.2f\n",mMaxVtxR);
 	printf("Maximum |Vz|: %1.2f\n",mMaxVtxZ);
 	printf("Maximum |VzDiff|: %1.2f\n",mMaxVzDiff);
