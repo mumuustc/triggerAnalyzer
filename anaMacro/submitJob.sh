@@ -21,9 +21,6 @@ Universe     = vanilla
 Notification = never
 GetEnv       = True
 InitialDir   = $initDir
-Requirements = (CPU_Type != "crs") && (CPU_Experiment == "star")
-+Experiment  = "star"
-+Job_Type    = "cas"
 Executable   = analysis
 _EOF_
 
